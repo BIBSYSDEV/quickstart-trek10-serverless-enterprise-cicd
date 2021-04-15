@@ -4,7 +4,7 @@
   "description": "Sample project to be committed to the CodeCommit repo created for the Quick Start",
   "stackname": "sample-project",
   "samtemplate": "sample.yaml",
-  "cftemplate": "sample-transformed.yaml",
+  "cftemplate": "transformed.yaml",
   "scripts": {
     "start": "node api/handler.js",
     "test": "echo \"Error: no test specified\" && exit 1",

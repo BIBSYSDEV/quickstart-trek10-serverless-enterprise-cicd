@@ -100,16 +100,3 @@ Resources:
                     Action: sts:AssumeRole
               ManagedPolicyArns:
                 - arn:aws:iam::aws:policy/AdministratorAccess
-          SampleLambdaRole: # This must be attached to the sample lambda in addition to any policies defined in the SAM template
-            Type: AWS::IAM::Role
-            Properties:
-              Path: /
-              RoleName: !Sub SampleLambdaRole-${AWS::Region}-${AWS::AccountId}-${Stage}
-              AssumeRolePolicyDocument:
-                Version: '2012-10-17'
-                Statement:
-                  - Effect: Allow
-                    Principal:
-                      Service:
-                        - lambda.amazonaws.com
-                    Action: sts:AssumeRole

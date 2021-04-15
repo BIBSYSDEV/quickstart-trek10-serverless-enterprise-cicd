@@ -55,10 +55,7 @@ Resources:
             - iam:AttachRolePolicy
             - iam:PutRolePolicy
             - iam:DeleteRolePolicy
-            Resource:
-            - !Sub arn:aws:iam::${AWS::AccountId}:role/SampleLambdaRole-*
-            - !Sub arn:aws:iam::${AWS::AccountId}:role/CodePipelineDeploymentRole-*
-            - !Sub arn:aws:iam::${AWS::AccountId}:role/CodePipelineServiceRole-*
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/*
 Outputs:
   RemoteAccountRole:
     Value: !GetAtt ChildAccountRole.Arn

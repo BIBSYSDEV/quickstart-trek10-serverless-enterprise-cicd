@@ -49,79 +49,10 @@ Conditions:
   AddProdAccountPermissions: !Not [!Equals [ !Ref ProdAwsAccountId, '' ]]
 
 Resources:
-  SecretDev:
-    Condition: AddDevAccountPermissions
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: Secret to define sensitive data for application in child accounts (Dev)
-      KmsKeyId: !GetAtt SecretsManagerKey.Arn
-      GenerateSecretString:
-        SecretStringTemplate: '{"username": "sample-user"}'
-        GenerateStringKey: "password"
-        PasswordLength: 30
-        ExcludeCharacters: '"@/\'
-      Name: !Sub sample-secret-${AWS::Region}-${AWS::AccountId}-dev
-      Tags:
-        - Key: Stage
-          Value: dev
-  SecretProd:
-    Condition: AddProdAccountPermissions
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: Secret to define sensitive data for application in child accounts (Prod)
-      KmsKeyId: !GetAtt SecretsManagerKey.Arn
-      GenerateSecretString:
-        SecretStringTemplate: '{"username": "sample-user"}'
-        GenerateStringKey: "password"
-        PasswordLength: 30
-        ExcludeCharacters: '"@/\'
-      Name: !Sub sample-secret-${AWS::Region}-${AWS::AccountId}-prod
-      Tags:
-        - Key: Stage
-          Value: prod
-
-  SecretPolicyDev:
-    Condition: AddDevAccountPermissions
-    Type: AWS::SecretsManager::ResourcePolicy
-    Properties:
-      SecretId: !Ref SecretDev
-      ResourcePolicy:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS:
-                - !Sub arn:aws:iam::${DevAwsAccountId}:role/SampleLambdaRole-${AWS::Region}-${DevAwsAccountId}-dev
-            Action:
-              - secretsmanager:GetSecretValue
-            Resource: '*'
-            Condition:
-              ForAnyValue:StringEquals: # Only the latest secret can be retrieved (per best practices)
-                secretsmanager:VersionStage: AWSCURRENT
-
-  SecretPolicyProd:
-    Condition: AddProdAccountPermissions
-    Type: AWS::SecretsManager::ResourcePolicy
-    Properties:
-      SecretId: !Ref SecretProd
-      ResourcePolicy:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS:
-                - !Sub arn:aws:iam::${ProdAwsAccountId}:role/SampleLambdaRole-${AWS::Region}-${ProdAwsAccountId}-prod
-            Action:
-              - secretsmanager:GetSecretValue
-            Resource: '*'
-            Condition:
-              ForAnyValue:StringEquals: # Only the latest secret can be retrieved (per best practices)
-                secretsmanager:VersionStage: AWSCURRENT
-
   SecretsManagerKey: # This key is used to encrypt/decrypt the secret in Secrets Manager
     Type: AWS::KMS::Key
     Properties:
-      Description: "Key for encrypting sample Secret Manager secret"
+      Description: "Key for encrypting Secret Manager secret"
       KeyPolicy:
         Version: '2012-10-17'
         Id: key-default-1
@@ -140,11 +71,11 @@ Resources:
               AWS:
                 - !If
                   - AddDevAccountPermissions
-                  - !Sub arn:aws:iam::${DevAwsAccountId}:role/SampleLambdaRole-${AWS::Region}-${DevAwsAccountId}-dev
+                  - !Sub ${DevAwsAccountId}
                   - !Ref AWS::NoValue
                 - !If
                   - AddProdAccountPermissions
-                  - !Sub arn:aws:iam::${ProdAwsAccountId}:role/SampleLambdaRole-${AWS::Region}-${ProdAwsAccountId}-prod
+                  - !Sub ${ProdAwsAccountId}
                   - !Ref AWS::NoValue
             Action:
               - kms:Decrypt
@@ -161,7 +92,7 @@ Resources:
     Properties:
       RepositoryName: !Ref AppName
       Triggers:
-        - CustomData: !Sub '{"SecretArnDev": "${SecretDev}","SecretsManagerKey": "${SecretsManagerKey.Arn}","AppName": "${AppName}","BuildImageName": "${BuildImageName}","ArtifactBucket": "${ArtifactBucket}","ArtifactBucketKeyArn": "${ArtifactBucketKeyArn}","SamTranslationBucket": "${SamTranslationBucket}","PipelineServiceRoleArn": "${PipelineServiceRoleArn}","DevAwsAccountId": "${DevAwsAccountId}"}'
+        - CustomData: !Sub '{"SecretsManagerKey": "${SecretsManagerKey.Arn}","AppName": "${AppName}","BuildImageName": "${BuildImageName}","ArtifactBucket": "${ArtifactBucket}","ArtifactBucketKeyArn": "${ArtifactBucketKeyArn}","SamTranslationBucket": "${SamTranslationBucket}","PipelineServiceRoleArn": "${PipelineServiceRoleArn}","DevAwsAccountId": "${DevAwsAccountId}"}'
           DestinationArn: !Ref DynamicPipelineMakerLambdaArn
           Events:
             - createReference
