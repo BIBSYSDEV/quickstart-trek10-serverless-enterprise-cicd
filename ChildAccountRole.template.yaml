@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  (qs-1ph8neha1) 
+  (qs-1ph8neha1)
   Serverless CICD Quick Start
   Initial roles for child accounts
+  (Role that enables tooling account to access a child account)
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterLabels:

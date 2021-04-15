@@ -1,8 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  (qs-1ph8nehbe) 
+  (qs-1ph8nehbe)
   Serverless CICD Quick Start
   Shared services account resources for a project
+  (A project entry containing the account-details for a project that is being deployed by the
+   tooling account)
 
 Parameters:
   AppName:
