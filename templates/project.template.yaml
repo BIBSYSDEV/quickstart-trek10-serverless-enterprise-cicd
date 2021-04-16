@@ -142,20 +142,6 @@ Outputs:
   IAMUserName:
     Description: IAM user to be able to use the repository
     Value: !Ref RepositoryUser
-  SecretArnDev:
-    Description: Dev secret ARN
-    Value:
-      !If
-        - AddDevAccountPermissions
-        - !Ref SecretDev
-        - ''
-  SecretArnProd:
-    Description: Prod secret ARN
-    Value:
-      !If
-        - AddProdAccountPermissions
-        - !Ref SecretProd
-        - ''
   GitUserName:
     Description: Username for access to the CodeCommit repository
     Value: !GetAtt CodecommitCredentials.UserName

@@ -48,13 +48,6 @@ Parameters:
   DynamicPipelineCleanupLambdaArn:
     Description: ARN of Lambda function to clean up dynamic pipeline
     Type: String
-  SecretArnDev:
-    Description: ARN for Secrets Manager secret for dev
-    Type: String
-  SecretArnProd:
-    Description: ARN for Secrets Manager secret for production
-    Type: String
-    Default: ''
   SecretsManagerKey:
     Description: KMS key for the use of secrets across accounts
     Type: String

@@ -224,12 +224,6 @@ Resources:
         PipelineServiceRoleArn: !GetAtt 
           - AccountStack
           - Outputs.PipelineServiceRoleArn
-        SecretArnDev: !GetAtt 
-          - ProjectSetupStack
-          - Outputs.SecretArnDev
-        SecretArnProd: !GetAtt 
-          - ProjectSetupStack
-          - Outputs.SecretArnProd
         SecretsManagerKey: !GetAtt 
           - ProjectSetupStack
           - Outputs.SecretsManagerKey
