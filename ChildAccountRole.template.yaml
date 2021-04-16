@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  (qs-1ph8neha1) 
+  (qs-1ph8neha1)
   Serverless CICD Quick Start
   Initial roles for child accounts
+  (Role that enables tooling account to access a child account)
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterLabels:
@@ -55,10 +56,7 @@ Resources:
             - iam:AttachRolePolicy
             - iam:PutRolePolicy
             - iam:DeleteRolePolicy
-            Resource:
-            - !Sub arn:aws:iam::${AWS::AccountId}:role/SampleLambdaRole-*
-            - !Sub arn:aws:iam::${AWS::AccountId}:role/CodePipelineDeploymentRole-*
-            - !Sub arn:aws:iam::${AWS::AccountId}:role/CodePipelineServiceRole-*
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/*
 Outputs:
   RemoteAccountRole:
     Value: !GetAtt ChildAccountRole.Arn

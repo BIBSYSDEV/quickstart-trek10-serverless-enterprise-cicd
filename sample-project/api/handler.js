@@ -1,28 +1,11 @@
 const AWS = require('aws-sdk');
 const docClient = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10' });
-var secretsmanager = new AWS.SecretsManager();
-
-function getSecrets() {
-    var params = {
-        SecretId: process.env.SECRET_ARN, 
-        VersionStage: "AWSCURRENT"
-    };
-    return secretsmanager.getSecretValue(params).promise();
-}
-
-var secretdata;
 
 exports.sample = async (event, context, callback) => {
     const id = event.pathParameters.id;
     const httpMethod = event.httpMethod;
     console.info(`id: ${id}`)
     console.info(`httpMethod: ${httpMethod}`)
-    if (secretdata) {
-        console.debug('secrets retrieved from cache');
-    } else {
-        secretdata = (await getSecrets()).SecretString;
-        console.debug('secrets retrieved from secret in master account');
-    }
     if (httpMethod === 'GET') {
         console.info(`inside get`)
         const value = await sampleGet(id);

@@ -5,6 +5,7 @@ Parameters:
   MasterSecretArn:
     Description: Master Secret ARN
     Type: String
+    Default: ''
   MasterSecretsManagerKey:
     Description: KMS Key for the use of secrets across accounts
     Type: String
@@ -13,6 +14,19 @@ Parameters:
     Type: String
 
 Resources:
+  SampleLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+
   SampleApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -23,7 +37,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref SampleDDbTable
-          SECRET_ARN: !Ref MasterSecretArn
       Events:
         GetTableData:
           Type: Api
@@ -35,7 +48,7 @@ Resources:
           Properties:
             Path: /sample/{id}
             Method: post
-      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/SampleLambdaRole-${AWS::Region}-${AWS::AccountId}-${Stage}
+      Role: !GetAtt SampleLambdaRole.Arn
       Tags:
         Sample: true
         QuickStartAuthor: Trek10
@@ -45,7 +58,7 @@ Resources:
     Properties:
       PolicyName: !Sub SampleApiFunctionPermission-${AWS::Region}-${AWS::AccountId}-${SampleApiFunction}
       Roles:
-        - !Sub SampleLambdaRole-${AWS::Region}-${AWS::AccountId}-${Stage}
+        - !Ref SampleLambdaRole
       PolicyDocument:
         Version: '2012-10-17' # Policy Document
         Statement:
@@ -64,10 +77,6 @@ Resources:
               - logs:CreateLogStream
               - logs:PutLogEvents
             Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${SampleApiFunction}:*
-          - Effect: Allow
-            Action:
-              - secretsmanager:GetSecretValue
-            Resource: !Ref MasterSecretArn
           - Effect: Allow
             Action:
               - kms:Decrypt

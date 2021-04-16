@@ -48,13 +48,6 @@ Parameters:
   DynamicPipelineCleanupLambdaArn:
     Description: ARN of Lambda function to clean up dynamic pipeline
     Type: String
-  SecretArnDev:
-    Description: ARN for Secrets Manager secret for dev
-    Type: String
-  SecretArnProd:
-    Description: ARN for Secrets Manager secret for production
-    Type: String
-    Default: ''
   SecretsManagerKey:
     Description: KMS key for the use of secrets across accounts
     Type: String
@@ -147,8 +140,8 @@ Resources:
                     - IsProdStage
                     - !Sub ${AppName}-dev
                     - !Sub ${AppName}-dev-${Suffix}
-                TemplatePath: BuildArtifact::sample-transformed.yaml
-                TemplateConfiguration: BuildArtifact::sample-configuration-dev.json
+                TemplatePath: BuildArtifact::transformed.yaml
+                TemplateConfiguration: BuildArtifact::configuration-dev.json
               RoleArn: !Sub arn:aws:iam::${DevAwsAccountId}:role/CodePipelineServiceRole-${AWS::Region}-${DevAwsAccountId}-dev
             - Name: DeployChangeSet
               RunOrder: 2
@@ -199,8 +192,8 @@ Resources:
                   RoleArn: !Sub arn:aws:iam::${ProdAwsAccountId}:role/CodePipelineDeploymentRole-${AWS::Region}-${ProdAwsAccountId}-prod
                   StackName:
                      !Sub ${AppName}-prod
-                  TemplatePath: BuildArtifact::sample-transformed.yaml
-                  TemplateConfiguration: BuildArtifact::sample-configuration-prod.json
+                  TemplatePath: BuildArtifact::transformed.yaml
+                  TemplateConfiguration: BuildArtifact::configuration-prod.json
                 RoleArn: !Sub arn:aws:iam::${ProdAwsAccountId}:role/CodePipelineServiceRole-${AWS::Region}-${ProdAwsAccountId}-prod
               - Name: Approval
                 RunOrder: 2
@@ -263,10 +256,6 @@ Resources:
             Value: !Ref AWS::AccountId
           - Name: SAM_BUCKET
             Value: !Ref SamTranslationBucket
-          - Name: SECRET_ARN_DEV
-            Value: !Ref SecretArnDev
-          - Name: SECRET_ARN_PROD
-            Value: !Ref SecretArnProd
           - Name: SECRET_MANAGER_KEY
             Value: !Ref SecretsManagerKey
       ServiceRole: !Ref PipelineServiceRoleArn
