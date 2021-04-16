@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  (qs-1ph8neha8) 
+  (qs-1ph8neha8)
   Serverless CICD Quick Start
   Resources for the child accounts
+  (Connection between the tooling and dev/prod account)
 
 Parameters:
   AwsAccountId:
