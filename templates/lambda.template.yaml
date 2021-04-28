@@ -402,7 +402,12 @@ Resources:
             Action:
               - ssm:GetParameter
             Resource:
-              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*CustomData
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/CICD/*
+          - Effect: Allow
+            Action:
+              - codestar-connections:PassConnection
+            Resource:
+              - !Sub arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/*
 
 
   DynamicPipelineMakerGitHubLambda:
@@ -455,7 +460,7 @@ Resources:
                   TemplateURL=os.environ['TemplateURL'],
                   Parameters=[
                       {
-                          'ParameterKey': 'Branch',
+                          'ParameterKey': 'BranchName',
                           'ParameterValue': branch
                       },
                       {
@@ -485,7 +490,7 @@ Resources:
 
           def get_custom_data(event):
               repository = event['repository']
-              parameter = ssm_client.get_parameter(Name='/CICD/CustomData/+'repository')['Parameter']['Value']
+              parameter = ssm_client.get_parameter(Name='/CICD/CustomData/'+repository)['Parameter']['Value']
               logger.info('customData:{}'.format(json.dumps(parameter)))
               return json.loads(parameter)
 
