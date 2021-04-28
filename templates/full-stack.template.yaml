@@ -91,16 +91,17 @@ Parameters:
     Description: Name of role created by ChildAccountRole template in development account
     Type: String
     Default: ChildAccountRole
-  GitHubRepo:
-    Description: GitHub repository name
+  CodeStarSourceConnectionArn:
+    Description: The connection ARN that is configured and authenticated for the source provider.
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: github-unit-connection
+  FullRepositoryId:
+    Description: The owner and name of the repository where source changes are to be detected.
     Type: String
-  GitHubBranch:
-    Description: GitHub branch name
+  BranchName:
+    Description: The name of the branch where source changes are to be detected.
     Type: String
-  GitHubToken:
-    Description: GitHub token
-    Type: String
-    NoEcho: true
+    Default: master
 
 Conditions:
   UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
@@ -186,8 +187,8 @@ Resources:
         DevAwsAccountId: !Ref DevAwsAccountId
         ProdAwsAccountId: !Ref ProdAwsAccountId
         AppName: !Ref AppName
-        RepoName: !Ref GitHubRepo
-        GitHubToken: !Ref GitHubToken
+        CodeStarSourceConnectionArn: !Ref CodeStarSourceConnectionArn
+        FullRepositoryId: !Ref FullRepositoryId
         BuildImageName: !Ref BuildImageName
         ArtifactBucket: !GetAtt 
           - AccountStack
@@ -214,9 +215,9 @@ Resources:
         DevAwsAccountId: !Ref DevAwsAccountId
         ProdAwsAccountId: !Ref ProdAwsAccountId
         AppName: !Ref AppName
-        RepoName: !Ref GitHubRepo
-        GitHubToken: !Ref GitHubToken
-        Branch: !Ref GitHubBranch
+        CodeStarSourceConnectionArn: !Ref CodeStarSourceConnectionArn
+        FullRepositoryId: !Ref FullRepositoryId
+        BranchName: !Ref BranchName
         DynamicPipelineCleanupLambdaArn: !GetAtt 
           - LambdaStack
           - Outputs.DynamicPipelineCleanupLambda
@@ -336,3 +337,17 @@ Resources:
       Value: !GetAtt
         - ProjectSetupStack
         - Outputs.SecretsManagerKey
+
+  DevAwsAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/DevAwsAccountId
+      Type: String
+      Value: !Ref DevAwsAccountId
+
+  ProdAwsAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/ProdAwsAccountId
+      Type: String
+      Value: !Ref ProdAwsAccountId

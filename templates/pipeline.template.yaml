@@ -25,19 +25,14 @@ Parameters:
     AllowedPattern: (\d{12}|^$)
     ConstraintDescription: Must be an AWS account ID
     Default: '159527342995'
-  RepoName:
-    Description: GitHub repository name
+  CodeStarSourceConnectionArn:
+    Description: The connection ARN that is configured and authenticated for the source provider.
     Type: String
-  GitHubOwner:
-    Description: GitHub repository user
+  FullRepositoryId:
+    Description: The owner and name of the repository where source changes are to be detected.
     Type: String
-    Default: 'BIBSYSDEV'
-  GitHubToken:
-    Description: GitHub authentication token
-    Type: String
-    NoEcho: true
-  Branch:
-    Description: Repository branch name
+  BranchName:
+    Description: The name of the branch where source changes are to be detected.
     Type: String
     Default: master
   Suffix:
@@ -64,7 +59,7 @@ Parameters:
     Type: String
 
 Conditions:
-  IsProdStage: !Equals [ !Ref Branch, 'master' ]
+  IsProdStage: !Equals [ !Ref BranchName, 'master' ]
 
 Resources:
   PipelineNotificationsTopic:
@@ -107,17 +102,16 @@ Resources:
               RunOrder: 1
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
+                Provider: CodeStarSourceConnection
+                Owner: AWS
                 Version: '1'
               OutputArtifacts:
                 - Name: Source
               Configuration:
-                Owner: !Ref GitHubOwner
-                OAuthToken: !Ref GitHubToken
-                Repo: !Ref RepoName
-                Branch: !Ref Branch
-                PollForSourceChanges: true
+                ConnectionArn: !Ref CodeStarSourceConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref BranchName
+                OutputArtifactFormat: CODEBUILD_CLONE_REF
         - Name: Build
           Actions:
             - Name: Build

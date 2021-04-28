@@ -7,12 +7,14 @@ Description: >
 Parameters:
   DevAwsAccountId:
     Description: AWS account ID for development account
-    Type: String
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/ProdAwsAccountId
     AllowedPattern: (\d{12}|^$)
     ConstraintDescription: Must be an AWS account ID
   ProdAwsAccountId:
     Description: AWS account ID for production account
-    Type: String
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/ProdAwsAccountId
     AllowedPattern: (\d{12}|^$)
     ConstraintDescription: Must be an AWS account ID
   AppName:
@@ -30,17 +32,17 @@ Parameters:
     Description: Name of role created by ChildAccountRole template in development account
     Type: String
     Default: ChildAccountRole
-  GitHubRepo:
-    Description: GitHub repository name
+  CodeStarSourceConnectionArn:
+    Description: The connection ARN that is configured and authenticated for the source provider.
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: github-unit-connection
+  FullRepositoryId:
+    Description: The owner and name of the repository where source changes are to be detected.
     Type: String
-  GitHubBranch:
-    Description: GitHub branch name
+  BranchName:
+    Description: The name of the branch where source changes are to be detected.
     Type: String
     Default: master
-  GitHubToken:
-    Description: GitHub token
-    Type: String
-    NoEcho: true
 
   PipelineArtifactBucket:
     Type: AWS::SSM::Parameter::Value<String>
@@ -81,8 +83,8 @@ Resources:
         DevAwsAccountId: !Ref DevAwsAccountId
         ProdAwsAccountId: !Ref ProdAwsAccountId
         AppName: !Ref AppName
-        RepoName: !Ref GitHubRepo
-        GitHubToken: !Ref GitHubToken
+        CodeStarSourceConnectionArn: !Ref CodeStarSourceConnectionArn
+        FullRepositoryId: !Ref FullRepositoryId
         BuildImageName: !Ref BuildImageName
         ArtifactBucket: !Ref PipelineArtifactBucket
         ArtifactBucketKeyArn: !Ref ArtifactBucketKeyArn
@@ -101,9 +103,9 @@ Resources:
         DevAwsAccountId: !Ref DevAwsAccountId
         ProdAwsAccountId: !Ref ProdAwsAccountId
         AppName: !Ref AppName
-        RepoName: !Ref GitHubRepo
-        GitHubToken: !Ref GitHubToken
-        Branch: !Ref GitHubBranch
+        CodeStarSourceConnectionArn: !Ref CodeStarSourceConnectionArn
+        FullRepositoryId: !Ref FullRepositoryId
+        BranchName: !Ref BranchName
         DynamicPipelineCleanupLambdaArn: !Ref DynamicPipelineCleanupLambdaArn
         BuildImageName: !Ref BuildImageName
         ArtifactBucketKeyArn: !Ref ArtifactBucketKeyArn

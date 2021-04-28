@@ -39,13 +39,12 @@ Parameters:
   SamTranslationBucket:
     Description: S3 bucket for SAM translations
     Type: String
-  RepoName:
-    Description: Repository name
+  CodeStarSourceConnectionArn:
+    Description: The connection ARN that is configured and authenticated for the source provider.
     Type: String
-  GitHubToken:
-    Description: GitHub token
+  FullRepositoryId:
+    Description: The owner and name of the repository where source changes are to be detected.
     Type: String
-    NoEcho: true
 
 Conditions:
   AddDevAccountPermissions: !Not [!Equals [ !Ref DevAwsAccountId, '' ]]
@@ -93,9 +92,9 @@ Resources:
   CustomDataParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub '${RepoName}CustomData'
+      Name: !Sub '/CICD/CustomData/${FullRepositoryId}'
       Type: String
-      Value: !Sub '{"RepoName": "${RepoName}","GitHubToken": "${GitHubToken}","SecretsManagerKey": "${SecretsManagerKey.Arn}","AppName": "${AppName}","BuildImageName": "${BuildImageName}","ArtifactBucket": "${ArtifactBucket}","ArtifactBucketKeyArn": "${ArtifactBucketKeyArn}","SamTranslationBucket": "${SamTranslationBucket}","PipelineServiceRoleArn": "${PipelineServiceRoleArn}","DevAwsAccountId": "${DevAwsAccountId}"}'
+      Value: !Sub '{"FullRepositoryId": "${FullRepositoryId}","CodeStarSourceConnectionArn": "${CodeStarSourceConnectionArn}","SecretsManagerKey": "${SecretsManagerKey.Arn}","AppName": "${AppName}","BuildImageName": "${BuildImageName}","ArtifactBucket": "${ArtifactBucket}","ArtifactBucketKeyArn": "${ArtifactBucketKeyArn}","SamTranslationBucket": "${SamTranslationBucket}","PipelineServiceRoleArn": "${PipelineServiceRoleArn}","DevAwsAccountId": "${DevAwsAccountId}"}'
 
 Outputs:
   SecretsManagerAliasName:

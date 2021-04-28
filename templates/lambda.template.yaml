@@ -484,8 +484,8 @@ Resources:
               return True
 
           def get_custom_data(event):
-              repo_name = event['repository'].split('/')[1]
-              parameter = ssm_client.get_parameter(Name=repo_name+'CustomData')['Parameter']['Value']
+              repository = event['repository']
+              parameter = ssm_client.get_parameter(Name='/CICD/CustomData/+'repository')['Parameter']['Value']
               logger.info('customData:{}'.format(json.dumps(parameter)))
               return json.loads(parameter)
 
