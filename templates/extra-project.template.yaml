@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  (qs-1ph8nehai)
+  Serverless CICD Quick Start
+  Master template to register extra projects with pipelines
+
+Parameters:
+  DevAwsAccountId:
+    Description: AWS account ID for development account
+    Type: String
+    AllowedPattern: (\d{12}|^$)
+    ConstraintDescription: Must be an AWS account ID
+  ProdAwsAccountId:
+    Description: AWS account ID for production account
+    Type: String
+    AllowedPattern: (\d{12}|^$)
+    ConstraintDescription: Must be an AWS account ID
+  AppName:
+    Description: Application name, used for the repository and child stack name
+    Type: String
+  BuildImageName:
+    Description: Docker image for application build
+    Type: String
+    Default: aws/codebuild/standard:3.0
+  ProdChildAccountRoleName:
+    Description: Name of role created by ChildAccountRole template in production account
+    Type: String
+    Default: ChildAccountRole
+  DevChildAccountRoleName:
+    Description: Name of role created by ChildAccountRole template in development account
+    Type: String
+    Default: ChildAccountRole
+  GitHubRepo:
+    Description: GitHub repository name
+    Type: String
+  GitHubBranch:
+    Description: GitHub branch name
+    Type: String
+    Default: master
+  GitHubToken:
+    Description: GitHub token
+    Type: String
+    NoEcho: true
+
+  PipelineArtifactBucket:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/PipelineArtifactBucket
+  ArtifactBucketKeyArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/ArtifactBucketKeyArn
+  SamTranslationBucket:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/SamTranslationBucket
+  PipelineServiceRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/PipelineServiceRoleArn
+  QSS3BucketName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/QSS3BucketName
+  QSS3BucketRegion:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/QSS3BucketRegion
+  QSS3KeyPrefix:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/QSS3KeyPrefix
+  DynamicPipelineCleanupLambdaArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/DynamicPipelineCleanupLambdaArn
+  SecretsManagerKey:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /CICD/SecretsManagerKey
+
+Conditions:
+  UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
+
+Resources:
+  ProjectSetupStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DevAwsAccountId: !Ref DevAwsAccountId
+        ProdAwsAccountId: !Ref ProdAwsAccountId
+        AppName: !Ref AppName
+        RepoName: !Ref GitHubRepo
+        GitHubToken: !Ref GitHubToken
+        BuildImageName: !Ref BuildImageName
+        ArtifactBucket: !Ref PipelineArtifactBucket
+        ArtifactBucketKeyArn: !Ref ArtifactBucketKeyArn
+        SamTranslationBucket: !Ref SamTranslationBucket
+        PipelineServiceRoleArn: !Ref PipelineServiceRoleArn
+      TemplateURL: !Sub
+        - 'https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}templates/project.template.yaml'
+        - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+          S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+      TimeoutInMinutes: 60
+
+  ProjectPipelineStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DevAwsAccountId: !Ref DevAwsAccountId
+        ProdAwsAccountId: !Ref ProdAwsAccountId
+        AppName: !Ref AppName
+        RepoName: !Ref GitHubRepo
+        GitHubToken: !Ref GitHubToken
+        Branch: !Ref GitHubBranch
+        DynamicPipelineCleanupLambdaArn: !Ref DynamicPipelineCleanupLambdaArn
+        BuildImageName: !Ref BuildImageName
+        ArtifactBucketKeyArn: !Ref ArtifactBucketKeyArn
+        ArtifactBucket: !Ref PipelineArtifactBucket
+        SamTranslationBucket: !Ref SamTranslationBucket
+        PipelineServiceRoleArn: !Ref PipelineServiceRoleArn
+        SecretsManagerKey: !Ref SecretsManagerKey
+      TemplateURL: !Sub
+        - 'https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}templates/pipeline.template.yaml'
+        - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+          S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+      TimeoutInMinutes: 60
