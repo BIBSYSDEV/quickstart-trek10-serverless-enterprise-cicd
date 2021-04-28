@@ -6,7 +6,7 @@ Description: >
 
 Parameters:
   AppName:
-    Description: Application name, used for the repository and child stack name
+    Description: Application name, used for child stack name
     Type: String
     Default: Sample
   BuildImageName:
@@ -25,6 +25,17 @@ Parameters:
     AllowedPattern: (\d{12}|^$)
     ConstraintDescription: Must be an AWS account ID
     Default: '159527342995'
+  RepoName:
+    Description: GitHub repository name
+    Type: String
+  GitHubOwner:
+    Description: GitHub repository user
+    Type: String
+    Default: 'BIBSYSDEV'
+  GitHubToken:
+    Description: GitHub authentication token
+    Type: String
+    NoEcho: true
   Branch:
     Description: Repository branch name
     Type: String
@@ -92,18 +103,21 @@ Resources:
       Stages:
         - Name: Source
           Actions:
-            - Name: CodeCommitSourceAction
+            - Name: GitHubSourceAction
               RunOrder: 1
               ActionTypeId:
                 Category: Source
-                Provider: CodeCommit
-                Owner: AWS
+                Owner: ThirdParty
+                Provider: GitHub
                 Version: '1'
               OutputArtifacts:
                 - Name: Source
               Configuration:
-                RepositoryName: !Ref AppName
-                BranchName: !Ref Branch
+                Owner: !Ref GitHubOwner
+                OAuthToken: !Ref GitHubToken
+                Repo: !Ref RepoName
+                Branch: !Ref Branch
+                PollForSourceChanges: true
         - Name: Build
           Actions:
             - Name: Build

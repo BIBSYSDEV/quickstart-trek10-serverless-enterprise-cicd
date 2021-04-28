@@ -398,6 +398,138 @@ Resources:
               - s3:GetObject
             Resource:
               - !Sub arn:aws:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+            Resource:
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*CustomData
+
+
+  DynamicPipelineMakerGitHubLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Runtime: python3.6
+      Timeout: 900
+      Role: !GetAtt DynamicPipelineMakerLambdaRole.Arn
+      Environment:
+        Variables:
+          LOGGING_LEVEL: INFO
+          TemplateURL: !Sub 
+            - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}templates/pipeline.template.yaml
+            - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
+              S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
+          StackName: !Ref ParentStackName
+          DynamicPipelineCleanupLambdaArn: !GetAtt DynamicPipelineCleanupLambda.Arn
+      Code:
+        ZipFile: |
+          import os, boto3, logging, json, re, concurrent.futures
+
+          logger = logging.getLogger()
+          logging.basicConfig()
+          LOGGING_LEVEL = os.environ['LOGGING_LEVEL']
+          logger.setLevel(LOGGING_LEVEL)
+
+          # override boto3 logging configuration
+          logging.getLogger('boto3').setLevel(logging.ERROR)
+          logging.getLogger('boto3').propagate = False
+          logging.getLogger('botocore').setLevel(logging.ERROR)
+          logging.getLogger('botocore').propagate = False
+
+          max_workers = 5
+
+          cf_client = boto3.client('cloudformation')
+          ssm_client = boto3.client('ssm')
+
+          def sanitize_branch_name(branch):
+                        suffix = re.sub('[^0-9a-zA-Z]+', '-', branch)
+                        StackName = '{}-PPS-branch-{}'.format(os.environ['StackName'], suffix)[:127]
+                        return suffix, StackName
+
+          def create_pipeline_stack(branch, customParameters):
+              suffix, StackName = sanitize_branch_name(branch)
+              logger.info('creating stack: {}'.format(StackName))
+              response = cf_client.create_stack(
+                  StackName=StackName,
+                  TemplateURL=os.environ['TemplateURL'],
+                  Parameters=[
+                      {
+                          'ParameterKey': 'Branch',
+                          'ParameterValue': branch
+                      },
+                      {
+                          'ParameterKey': 'Suffix',
+                          'ParameterValue': suffix
+                      },
+                      {
+                          'ParameterKey': 'DynamicPipelineCleanupLambdaArn',
+                          'ParameterValue': os.environ['DynamicPipelineCleanupLambdaArn']
+                      },
+                  ]+list(map(lambda x: {"ParameterKey": x, "ParameterValue": customParameters[x]}, customParameters))
+              )
+              waiter = cf_client.get_waiter('stack_create_complete')
+              waiter.wait(StackName=StackName)
+              logger.info('successfully created new CloudFormation stack:{}'.format(StackName))
+              return True
+
+          def delete_pipeline_stack(branch):
+              suffix, StackName = sanitize_branch_name(branch)
+              response = cf_client.delete_stack(
+                  StackName=StackName
+              )
+              waiter = cf_client.get_waiter('stack_delete_complete')
+              waiter.wait(StackName=StackName)
+              logger.info('successfully deleted CloudFormation stack:{}'.format(StackName))
+              return True
+
+          def get_custom_data(event):
+              repo_name = event['repository'].split('/')[1]
+              parameter = ssm_client.get_parameter(Name=repo_name+'CustomData')['Parameter']['Value']
+              logger.info('customData:{}'.format(json.dumps(parameter)))
+              return json.loads(parameter)
+
+          def lambda_handler(event, context):
+              event['token'] = '***'
+              logger.info('event:{}'.format(json.dumps(event)))
+              result_futures = []
+              with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                  if event['head_ref']:
+                      # it is pull request
+                      branch = event['head_ref']
+                      if branch == 'master':
+                          logger.info('skipping branch master, pipeline for this branch created by main stack')
+                      elif event['event_name'] == 'pull_request' and 'opened' in event['event']['action']:
+                          logger.info('created new branch:{}, creating pipeline for this branch'.format(branch))
+                          future = executor.submit(create_pipeline_stack, branch, get_custom_data(event))
+                          result_futures.append(future)
+                      elif event['event_name'] == 'pull_request' and event['event']['action'] == 'closed':
+                          logger.info('deleted old branch:{}, deleting pipeline for this branch'.format(branch))
+                          future = executor.submit(delete_pipeline_stack, branch)
+                          result_futures.append(future)
+
+              for future in result_futures:
+                  future.result()
+
+              return
+
+  GitHubInvokeLambdaUser:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: GitHubInvokeLambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: !GetAtt DynamicPipelineMakerGitHubLambda.Arn
+
+  GitHubInvokeLambdaAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref GitHubInvokeLambdaUser
 
   DynamicPipelineMakerLambda:
     Type: AWS::Lambda::Function
@@ -410,7 +542,7 @@ Resources:
       Environment:
         Variables:
           LOGGING_LEVEL: INFO
-          TemplateURL: !Sub 
+          TemplateURL: !Sub
             - https://${S3Bucket}.s3.${S3Region}.${AWS::URLSuffix}/${QSS3KeyPrefix}templates/pipeline.template.yaml
             - S3Region: !If [UsingDefaultBucket, !Ref 'AWS::Region', !Ref QSS3BucketRegion]
               S3Bucket: !If [UsingDefaultBucket, !Sub '${QSS3BucketName}-${AWS::Region}', !Ref QSS3BucketName]
@@ -561,72 +693,6 @@ Resources:
               else:
                   return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
 
-  CodecommitCredentialsLambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: lambda.amazonaws.com
-          Action: sts:AssumeRole
-      Path: /
-      Policies:
-      - PolicyName: CodecommitCredentialsLambda
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource:
-            - arn:aws:logs:*:*:*
-          - Effect: Allow
-            Action:
-              - iam:*
-            Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:user/AWS-CICD-Quickstart-${AppName}-${AWS::Region}-${AWS::AccountId}
-
-  CodecommitCredentialsLambda:
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: index.handler
-      Role: !GetAtt CodecommitCredentialsLambdaRole.Arn
-      Runtime: python3.6
-      Timeout: 30
-      Code:
-        ZipFile: |
-          import json
-          import cfnresponse
-          import boto3
-          from botocore.exceptions import ClientError
-          client = boto3.client('iam')
-          def handler(event, context):
-              print(json.dumps(event))
-              UserName = event['ResourceProperties']['IAM_USER_NAME']
-              if event['RequestType'] == 'Create':
-                  try:
-                      credential = client.create_service_specific_credential(UserName=UserName, ServiceName='codecommit.amazonaws.com')['ServiceSpecificCredential']
-                      return cfnresponse.send(event, context, cfnresponse.SUCCESS, {'UserName': credential['ServiceUserName'], 'Password': credential['ServicePassword']})
-                  except ClientError as e:
-                      print(e)
-                      return cfnresponse.send(event, context, cfnresponse.FAILED, {})
-              if event['RequestType'] == 'Delete':
-                  try:
-                      for credential in client.list_service_specific_credentials(UserName=UserName, ServiceName='codecommit.amazonaws.com')['ServiceSpecificCredentials']:
-                          client.delete_service_specific_credential(UserName=UserName, ServiceSpecificCredentialId=credential['ServiceSpecificCredentialId'])
-                      for key in client.list_ssh_public_keys(UserName=UserName)['SSHPublicKeys']:
-                          client.delete_ssh_public_key(UserName=UserName, SSHPublicKeyId=key['SSHPublicKeyId'])
-                      return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-                  except ClientError as e:
-                      print(e)
-                      return cfnresponse.send(event, context, cfnresponse.FAILED, {})
-              else:
-                  return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-
 Outputs:
   QuickStartStackMakerLambda:
     Value: !GetAtt QuickStartStackMakerLambda.Arn
@@ -634,7 +700,11 @@ Outputs:
     Value: !GetAtt DynamicPipelineCleanupLambda.Arn
   DynamicPipelineMakerLambda:
     Value: !GetAtt DynamicPipelineMakerLambda.Arn
+  DynamicPipelineMakerGitHubLambda:
+    Value: !Ref DynamicPipelineMakerGitHubLambda
   CleanUpBucketsLambda:
     Value: !GetAtt CleanUpBucketsLambda.Arn
-  CodecommitCredentialsLambda:
-    Value: !GetAtt CodecommitCredentialsLambda.Arn
+  GitHubInvokeLambdaAccessKeyId:
+    Value: !Ref GitHubInvokeLambdaAccessKey
+  GitHubInvokeLambdaSecretAccessKey:
+    Value: !GetAtt GitHubInvokeLambdaAccessKey.SecretAccessKey
