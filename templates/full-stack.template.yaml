@@ -66,7 +66,7 @@ Parameters:
   BuildImageName:
     Description: Docker image for application build
     Type: String
-    Default: aws/codebuild/amazonlinux2-x86_64-standard:2.0
+    Default: aws/codebuild/standard:3.0
   QSS3BucketName:
     AllowedPattern: "^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$"
     ConstraintDescription: Quick Start bucket name can include numbers, lowercase letters, uppercase letters, and hyphens (-). It cannot start or end with a hyphen (-).
@@ -91,6 +91,17 @@ Parameters:
     Description: Name of role created by ChildAccountRole template in development account
     Type: String
     Default: ChildAccountRole
+  CodeStarSourceConnectionArn:
+    Description: The connection ARN that is configured and authenticated for the source provider.
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: github-unit-connection
+  FullRepositoryId:
+    Description: The owner and name of the repository where source changes are to be detected.
+    Type: String
+  BranchName:
+    Description: The name of the branch where source changes are to be detected.
+    Type: String
+    Default: master
 
 Conditions:
   UsingDefaultBucket: !Equals [!Ref QSS3BucketName, 'aws-quickstart']
@@ -176,12 +187,8 @@ Resources:
         DevAwsAccountId: !Ref DevAwsAccountId
         ProdAwsAccountId: !Ref ProdAwsAccountId
         AppName: !Ref AppName
-        DynamicPipelineMakerLambdaArn: !GetAtt 
-          - LambdaStack
-          - Outputs.DynamicPipelineMakerLambda
-        CodecommitCredentialsLambdaArn: !GetAtt 
-          - LambdaStack
-          - Outputs.CodecommitCredentialsLambda
+        CodeStarSourceConnectionArn: !Ref CodeStarSourceConnectionArn
+        FullRepositoryId: !Ref FullRepositoryId
         BuildImageName: !Ref BuildImageName
         ArtifactBucket: !GetAtt 
           - AccountStack
@@ -208,6 +215,9 @@ Resources:
         DevAwsAccountId: !Ref DevAwsAccountId
         ProdAwsAccountId: !Ref ProdAwsAccountId
         AppName: !Ref AppName
+        CodeStarSourceConnectionArn: !Ref CodeStarSourceConnectionArn
+        FullRepositoryId: !Ref FullRepositoryId
+        BranchName: !Ref BranchName
         DynamicPipelineCleanupLambdaArn: !GetAtt 
           - LambdaStack
           - Outputs.DynamicPipelineCleanupLambda
@@ -253,28 +263,91 @@ Resources:
         - AccountStack
         - Outputs.PipelineArtifactBucket
 
-Outputs:
-  RepoCloneUrlSsh:
-    Value: !GetAtt 
-      - ProjectSetupStack
-      - Outputs.RepoCloneUrlSsh
-  RepoCloneUrlHttp:
-    Value: !GetAtt 
-      - ProjectSetupStack
-      - Outputs.RepoCloneUrlHttp
-  IAMUserName:
-    Value: !GetAtt 
-      - ProjectSetupStack
-      - Outputs.IAMUserName
-  GitUserName:
-    Description: Username for access to the CodeCommit repository
-    Value: !GetAtt 
-      - ProjectSetupStack
-      - Outputs.GitUserName
-  GitPassword:
-    Description: Password for access to the CodeCommit repository
-    Value: !GetAtt 
-      - ProjectSetupStack
-      - Outputs.GitPassword
+  PipelineArtifactBucketParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/PipelineArtifactBucket
+      Type: String
+      Value: !GetAtt
+        - AccountStack
+        - Outputs.PipelineArtifactBucket
 
-      
+  ArtifactBucketKeyArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/ArtifactBucketKeyArn
+      Type: String
+      Value: !GetAtt
+        - AccountStack
+        - Outputs.ArtifactBucketKeyArn
+
+  SamTranslationBucketParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/SamTranslationBucket
+      Type: String
+      Value: !GetAtt
+        - AccountStack
+        - Outputs.SamTranslationBucket
+
+  PipelineServiceRoleArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/PipelineServiceRoleArn
+      Type: String
+      Value: !GetAtt
+        - AccountStack
+        - Outputs.PipelineServiceRoleArn
+
+  QSS3BucketNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/QSS3BucketName
+      Type: String
+      Value: !Ref QSS3BucketName
+
+  QSS3BucketRegionParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/QSS3BucketRegion
+      Type: String
+      Value: !Ref QSS3BucketRegion
+
+  QSS3KeyPrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/QSS3KeyPrefix
+      Type: String
+      Value: !Ref QSS3KeyPrefix
+
+  DynamicPipelineCleanupLambdaArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/DynamicPipelineCleanupLambdaArn
+      Type: String
+      Value: !GetAtt
+      - LambdaStack
+      - Outputs.DynamicPipelineCleanupLambda
+
+  SecretsManagerKeyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/SecretsManagerKey
+      Type: String
+      Value: !GetAtt
+        - ProjectSetupStack
+        - Outputs.SecretsManagerKey
+
+  DevAwsAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/DevAwsAccountId
+      Type: String
+      Value: !Ref DevAwsAccountId
+
+  ProdAwsAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /CICD/ProdAwsAccountId
+      Type: String
+      Value: !Ref ProdAwsAccountId

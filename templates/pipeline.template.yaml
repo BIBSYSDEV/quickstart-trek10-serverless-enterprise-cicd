@@ -6,7 +6,7 @@ Description: >
 
 Parameters:
   AppName:
-    Description: Application name, used for the repository and child stack name
+    Description: Application name, used for child stack name
     Type: String
     Default: Sample
   BuildImageName:
@@ -25,8 +25,14 @@ Parameters:
     AllowedPattern: (\d{12}|^$)
     ConstraintDescription: Must be an AWS account ID
     Default: '159527342995'
-  Branch:
-    Description: Repository branch name
+  CodeStarSourceConnectionArn:
+    Description: The connection ARN that is configured and authenticated for the source provider.
+    Type: String
+  FullRepositoryId:
+    Description: The owner and name of the repository where source changes are to be detected.
+    Type: String
+  BranchName:
+    Description: The name of the branch where source changes are to be detected.
     Type: String
     Default: master
   Suffix:
@@ -53,7 +59,7 @@ Parameters:
     Type: String
 
 Conditions:
-  IsProdStage: !Equals [ !Ref Branch, 'master' ]
+  IsProdStage: !Equals [ !Ref BranchName, 'master' ]
 
 Resources:
   PipelineNotificationsTopic:
@@ -92,18 +98,20 @@ Resources:
       Stages:
         - Name: Source
           Actions:
-            - Name: CodeCommitSourceAction
+            - Name: GitHubSourceAction
               RunOrder: 1
               ActionTypeId:
                 Category: Source
-                Provider: CodeCommit
+                Provider: CodeStarSourceConnection
                 Owner: AWS
                 Version: '1'
               OutputArtifacts:
                 - Name: Source
               Configuration:
-                RepositoryName: !Ref AppName
-                BranchName: !Ref Branch
+                ConnectionArn: !Ref CodeStarSourceConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref BranchName
+                OutputArtifactFormat: CODEBUILD_CLONE_REF
         - Name: Build
           Actions:
             - Name: Build

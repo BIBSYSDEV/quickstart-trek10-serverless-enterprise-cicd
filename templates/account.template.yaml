@@ -87,11 +87,7 @@ Resources:
               - Resource: '*'
                 Effect: Allow
                 Action:
-                    - codecommit:GetBranch
-                    - codecommit:GetCommit
-                    - codecommit:UploadArchive
-                    - codecommit:GetUploadArchiveStatus
-                    - codecommit:CancelUploadArchive
+                  - codestar-connections:UseConnection
               - Resource: '*'
                 Effect: Allow
                 Action:

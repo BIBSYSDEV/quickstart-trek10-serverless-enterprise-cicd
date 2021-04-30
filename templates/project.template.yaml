@@ -23,12 +23,6 @@ Parameters:
     AllowedPattern: (\d{12}|^$)
     ConstraintDescription: Must be an AWS account ID
     Default: '159527342995'
-  DynamicPipelineMakerLambdaArn:
-    Description: ARN of Lambda function to create dynamic pipeline
-    Type: String
-  CodecommitCredentialsLambdaArn:
-    Description: ARN of Lambda function to create credentials for access to CodeCommit
-    Type: String
   BuildImageName:
     Description: Docker image for application build
     Type: String
@@ -44,6 +38,12 @@ Parameters:
     Type: String
   SamTranslationBucket:
     Description: S3 bucket for SAM translations
+    Type: String
+  CodeStarSourceConnectionArn:
+    Description: The connection ARN that is configured and authenticated for the source provider.
+    Type: String
+  FullRepositoryId:
+    Description: The owner and name of the repository where source changes are to be detected.
     Type: String
 
 Conditions:
@@ -86,41 +86,15 @@ Resources:
   SMSecretAlias:
     Type: AWS::KMS::Alias
     Properties:
-      AliasName: alias/secrets-manager
+      AliasName: !Sub 'alias/${AppName}-secrets-manager'
       TargetKeyId: !Ref SecretsManagerKey
 
-  Repository:
-    Type: AWS::CodeCommit::Repository
+  CustomDataParameter:
+    Type: AWS::SSM::Parameter
     Properties:
-      RepositoryName: !Ref AppName
-      Triggers:
-        - CustomData: !Sub '{"SecretsManagerKey": "${SecretsManagerKey.Arn}","AppName": "${AppName}","BuildImageName": "${BuildImageName}","ArtifactBucket": "${ArtifactBucket}","ArtifactBucketKeyArn": "${ArtifactBucketKeyArn}","SamTranslationBucket": "${SamTranslationBucket}","PipelineServiceRoleArn": "${PipelineServiceRoleArn}","DevAwsAccountId": "${DevAwsAccountId}"}'
-          DestinationArn: !Ref DynamicPipelineMakerLambdaArn
-          Events:
-            - createReference
-            - deleteReference
-          Name: Create or delete dynamic pipeline for new branch
-
-  DynamicPipelineMakerLambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties: 
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref DynamicPipelineMakerLambdaArn
-      Principal: codecommit.amazonaws.com
-      SourceArn: !GetAtt Repository.Arn
-
-  RepositoryUser:
-    Type: AWS::IAM::User
-    Properties:
-      UserName: !Sub AWS-CICD-Quickstart-${AppName}-${AWS::Region}-${AWS::AccountId}
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSCodeCommitPowerUser
-
-  CodecommitCredentials:
-    Type: AWS::CloudFormation::CustomResource
-    Properties:
-      ServiceToken: !Ref CodecommitCredentialsLambdaArn
-      IAM_USER_NAME: !Ref RepositoryUser
+      Name: !Sub '/CICD/CustomData/${FullRepositoryId}'
+      Type: String
+      Value: !Sub '{"FullRepositoryId": "${FullRepositoryId}","CodeStarSourceConnectionArn": "${CodeStarSourceConnectionArn}","SecretsManagerKey": "${SecretsManagerKey.Arn}","AppName": "${AppName}","BuildImageName": "${BuildImageName}","ArtifactBucket": "${ArtifactBucket}","ArtifactBucketKeyArn": "${ArtifactBucketKeyArn}","SamTranslationBucket": "${SamTranslationBucket}","PipelineServiceRoleArn": "${PipelineServiceRoleArn}","DevAwsAccountId": "${DevAwsAccountId}"}'
 
 Outputs:
   SecretsManagerAliasName:
@@ -129,24 +103,3 @@ Outputs:
   SecretsManagerKey:
     Description: KMS key for the use of secrets across accounts
     Value: !GetAtt SecretsManagerKey.Arn
-  RepoCloneUrlHttp:
-    Description: URL for HTTP loning 
-    Value: !GetAtt Repository.CloneUrlHttp
-  RepoCloneUrlSsh:
-    Description: URL for SSH cloning
-    Value: !GetAtt Repository.CloneUrlSsh
-  RepoSshConfigHost:
-    Description: URL for SSH cloning
-    Value: !Sub git-codecommit.${AWS::Region}.amazonaws.com/v1/repos/${Repository.Name}
-  RepoName:
-    Description: Name of the repo
-    Value: !GetAtt Repository.Name
-  IAMUserName:
-    Description: IAM user to be able to use the repository
-    Value: !Ref RepositoryUser
-  GitUserName:
-    Description: Username for access to the CodeCommit repository
-    Value: !GetAtt CodecommitCredentials.UserName
-  GitPassword:
-    Description: Password for access to the CodeCommit repository
-    Value: !GetAtt CodecommitCredentials.Password

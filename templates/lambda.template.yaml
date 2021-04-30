@@ -398,6 +398,17 @@ Resources:
               - s3:GetObject
             Resource:
               - !Sub arn:aws:s3:::${QSS3BucketName}/${QSS3KeyPrefix}*
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+            Resource:
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/CICD/*
+          - Effect: Allow
+            Action:
+              - codestar-connections:PassConnection
+            Resource:
+              - !Sub arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/*
+
 
   DynamicPipelineMakerLambda:
     Type: AWS::Lambda::Function
@@ -418,7 +429,12 @@ Resources:
           DynamicPipelineCleanupLambdaArn: !GetAtt DynamicPipelineCleanupLambda.Arn
       Code:
         ZipFile: |
-          import os, boto3, logging, json, re, concurrent.futures
+          import boto3
+          import concurrent.futures
+          import json
+          import logging
+          import os
+          import re
 
           logger = logging.getLogger()
           logging.basicConfig()
@@ -434,74 +450,106 @@ Resources:
           max_workers = 5
 
           cf_client = boto3.client('cloudformation')
+          ssm_client = boto3.client('ssm')
+
 
           def sanitize_branch_name(branch):
               suffix = re.sub('[^0-9a-zA-Z]+', '-', branch)
-              StackName = '{}-PPS-branch-{}'.format(os.environ['StackName'], suffix)[:127]
-              return suffix, StackName
+              stack_name = '{}-PPS-branch-{}'.format(os.environ['StackName'], suffix)[:127]
+              return suffix, stack_name
 
-          def create_pipeline_stack(branch, customParameters):
-              suffix, StackName = sanitize_branch_name(branch)
-              logger.info('creating stack: {}'.format(StackName))
-              response = cf_client.create_stack(
-                  StackName=StackName,
+
+          def create_pipeline_stack(branch, custom_parameters):
+              suffix, stack_name = sanitize_branch_name(branch)
+              logger.info('creating stack: {}'.format(stack_name))
+              cf_client.create_stack(
+                  StackName=stack_name,
                   TemplateURL=os.environ['TemplateURL'],
                   Parameters=[
-                      {
-                          'ParameterKey': 'Branch',
-                          'ParameterValue': branch
-                      },
-                      {
-                          'ParameterKey': 'Suffix',
-                          'ParameterValue': suffix
-                      },
-                      {
-                          'ParameterKey': 'DynamicPipelineCleanupLambdaArn',
-                          'ParameterValue': os.environ['DynamicPipelineCleanupLambdaArn']
-                      },
-                  ]+list(map(lambda x: {"ParameterKey": x, "ParameterValue": customParameters[x]}, customParameters))
+                                 {
+                                     'ParameterKey': 'BranchName',
+                                     'ParameterValue': branch
+                                 },
+                                 {
+                                     'ParameterKey': 'Suffix',
+                                     'ParameterValue': suffix
+                                 },
+                                 {
+                                     'ParameterKey': 'DynamicPipelineCleanupLambdaArn',
+                                     'ParameterValue': os.environ['DynamicPipelineCleanupLambdaArn']
+                                 },
+                             ] + list(map(lambda x: {"ParameterKey": x, "ParameterValue": custom_parameters[x]},
+                                          custom_parameters))
               )
+
               waiter = cf_client.get_waiter('stack_create_complete')
-              waiter.wait(StackName=StackName)
-              logger.info('successfully created new CloudFormation stack:{}'.format(StackName))
+              waiter.wait(StackName=stack_name)
+              logger.info('successfully created new CloudFormation stack:{}'.format(stack_name))
               return True
+
 
           def delete_pipeline_stack(branch):
-              suffix, StackName = sanitize_branch_name(branch)
-              response = cf_client.delete_stack(
-                  StackName=StackName
+              suffix, stack_name = sanitize_branch_name(branch)
+              cf_client.delete_stack(
+                  StackName=stack_name
               )
               waiter = cf_client.get_waiter('stack_delete_complete')
-              waiter.wait(StackName=StackName)
-              logger.info('successfully deleted CloudFormation stack:{}'.format(StackName))
+              waiter.wait(StackName=stack_name)
+              logger.info('successfully deleted CloudFormation stack:{}'.format(stack_name))
               return True
 
-          def lambda_handler(event, context):
-              logger.info('event:{}'.format(json.dumps(event)))
-              result_futures = []
-              with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                  for record in event['Records']:
-                      for reference in record['codecommit']['references']:
-                          logger.info('reference:{}'.format(json.dumps(reference)))
-                          if reference['ref'].split('/')[1] == 'heads':
-                              # it is branch
-                              branch = reference['ref'].split('/',2)[-1]
-                              if branch == 'master':
-                                  logger.info('skipping branch master, pipeline for this branch created by main stack')
-                                  continue
-                              if reference.get('created'):
-                                  logger.info('created new branch:{}, creating pipeline for this branch'.format(branch))
-                                  future = executor.submit(create_pipeline_stack, branch, json.loads(record['customData']))
-                                  result_futures.append(future)
-                              elif reference.get('deleted'):
-                                  logger.info('deleted old branch:{}, deleting pipeline for this branch'.format(branch))
-                                  future = executor.submit(delete_pipeline_stack, branch)
-                                  result_futures.append(future)
 
-              for future in result_futures:
+          def get_custom_data(event):
+              repository = event['repository']
+              parameter = ssm_client.get_parameter(Name='/CICD/CustomData/' + repository)['Parameter']['Value']
+              logger.info('customData:{}'.format(json.dumps(parameter)))
+              return json.loads(parameter)
+
+
+          def lambda_handler(event, context):
+              event['token'] = '***'
+              logger.info('event:{}'.format(json.dumps(event)))
+
+              for future in find_target(event):
                   future.result()
 
               return
+
+          def find_target(event):
+              result_futures = []
+              with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                  if event['head_ref']:
+                      # it is pull request
+                      branch = event['head_ref']
+                      if branch == 'master':
+                          logger.info('skipping branch master, pipeline for this branch created by main stack')
+                      elif event['event_name'] == 'pull_request' and 'opened' in event['event']['action']:
+                          logger.info('created new branch:{}, creating pipeline for this branch'.format(branch))
+                          future = executor.submit(create_pipeline_stack, branch, get_custom_data(event))
+                          result_futures.append(future)
+                      elif event['event_name'] == 'pull_request' and event['event']['action'] == 'closed':
+                          logger.info('deleted old branch:{}, deleting pipeline for this branch'.format(branch))
+                          future = executor.submit(delete_pipeline_stack, branch)
+                          result_futures.append(future)
+              return result_futures
+
+  GitHubInvokeLambdaUser:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: GitHubInvokeLambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: !GetAtt DynamicPipelineMakerGitHubLambda.Arn
+
+  GitHubInvokeLambdaAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref GitHubInvokeLambdaUser
 
   CleanUpBucketsLambdaRole:
     Type: AWS::IAM::Role
@@ -561,72 +609,6 @@ Resources:
               else:
                   return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
 
-  CodecommitCredentialsLambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: lambda.amazonaws.com
-          Action: sts:AssumeRole
-      Path: /
-      Policies:
-      - PolicyName: CodecommitCredentialsLambda
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource:
-            - arn:aws:logs:*:*:*
-          - Effect: Allow
-            Action:
-              - iam:*
-            Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:user/AWS-CICD-Quickstart-${AppName}-${AWS::Region}-${AWS::AccountId}
-
-  CodecommitCredentialsLambda:
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: index.handler
-      Role: !GetAtt CodecommitCredentialsLambdaRole.Arn
-      Runtime: python3.6
-      Timeout: 30
-      Code:
-        ZipFile: |
-          import json
-          import cfnresponse
-          import boto3
-          from botocore.exceptions import ClientError
-          client = boto3.client('iam')
-          def handler(event, context):
-              print(json.dumps(event))
-              UserName = event['ResourceProperties']['IAM_USER_NAME']
-              if event['RequestType'] == 'Create':
-                  try:
-                      credential = client.create_service_specific_credential(UserName=UserName, ServiceName='codecommit.amazonaws.com')['ServiceSpecificCredential']
-                      return cfnresponse.send(event, context, cfnresponse.SUCCESS, {'UserName': credential['ServiceUserName'], 'Password': credential['ServicePassword']})
-                  except ClientError as e:
-                      print(e)
-                      return cfnresponse.send(event, context, cfnresponse.FAILED, {})
-              if event['RequestType'] == 'Delete':
-                  try:
-                      for credential in client.list_service_specific_credentials(UserName=UserName, ServiceName='codecommit.amazonaws.com')['ServiceSpecificCredentials']:
-                          client.delete_service_specific_credential(UserName=UserName, ServiceSpecificCredentialId=credential['ServiceSpecificCredentialId'])
-                      for key in client.list_ssh_public_keys(UserName=UserName)['SSHPublicKeys']:
-                          client.delete_ssh_public_key(UserName=UserName, SSHPublicKeyId=key['SSHPublicKeyId'])
-                      return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-                  except ClientError as e:
-                      print(e)
-                      return cfnresponse.send(event, context, cfnresponse.FAILED, {})
-              else:
-                  return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-
 Outputs:
   QuickStartStackMakerLambda:
     Value: !GetAtt QuickStartStackMakerLambda.Arn
@@ -634,7 +616,11 @@ Outputs:
     Value: !GetAtt DynamicPipelineCleanupLambda.Arn
   DynamicPipelineMakerLambda:
     Value: !GetAtt DynamicPipelineMakerLambda.Arn
+  DynamicPipelineMakerGitHubLambda:
+    Value: !Ref DynamicPipelineMakerGitHubLambda
   CleanUpBucketsLambda:
     Value: !GetAtt CleanUpBucketsLambda.Arn
-  CodecommitCredentialsLambda:
-    Value: !GetAtt CodecommitCredentialsLambda.Arn
+  GitHubInvokeLambdaAccessKeyId:
+    Value: !Ref GitHubInvokeLambdaAccessKey
+  GitHubInvokeLambdaSecretAccessKey:
+    Value: !GetAtt GitHubInvokeLambdaAccessKey.SecretAccessKey
